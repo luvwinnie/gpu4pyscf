@@ -58,7 +58,12 @@ libvhf_rys.RYS_per_atom_jk_ip1.restype = ctypes.c_int
 #     dd_cache_size = nf * min(THREADS, _nearest_power2(SHM_SIZE//(g_size*3*8)))
 DD_CACHE_MAX = 101250 * (SHM_SIZE//48000)
 
-libvhf_rys.RYS_build_vjk_ip1_init(ctypes.c_int(SHM_SIZE))
+# Initialize CUDA constant memory on ALL visible devices
+from gpu4pyscf.__config__ import num_devices as _num_devices_grad
+for _dev_id in range(_num_devices_grad):
+    with cp.cuda.Device(_dev_id):
+        libvhf_rys.RYS_build_vjk_ip1_init(ctypes.c_int(SHM_SIZE))
+del _dev_id, _num_devices_grad
 
 def _jk_energy_per_atom(vhfopt, dm, j_factor=1., k_factor=1., verbose=None):
     '''

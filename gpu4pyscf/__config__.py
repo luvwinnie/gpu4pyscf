@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import logging
 import cupy
+
+logger = logging.getLogger(__name__)
 
 num_devices = cupy.cuda.runtime.getDeviceCount()
 
@@ -39,12 +43,43 @@ else:
 
 # Check P2P data transfer is available
 _p2p_access = True
+_p2p_enabled = {}  # Track which device pairs have p2p enabled
 if num_devices > 1:
     for src in range(num_devices):
         for dst in range(num_devices):
             if src != dst:
-                can_access_peer = cupy.cuda.runtime.deviceCanAccessPeer(src, dst)
-                _p2p_access &= can_access_peer
+                try:
+                    can_access_peer = cupy.cuda.runtime.deviceCanAccessPeer(src, dst)
+                    _p2p_access &= bool(can_access_peer)
+                    if can_access_peer:
+                        # Enable peer access between devices
+                        try:
+                            with cupy.cuda.Device(src):
+                                cupy.cuda.runtime.deviceEnablePeerAccess(dst)
+                            _p2p_enabled[(src, dst)] = True
+                        except cupy.cuda.runtime.CUDARuntimeError as e:
+                            if 'PeerAccessAlreadyEnabled' in str(e):
+                                _p2p_enabled[(src, dst)] = True
+                            else:
+                                logger.warning(
+                                    'Failed to enable P2P access %d->%d: %s', src, dst, e)
+                                _p2p_access = False
+                                _p2p_enabled[(src, dst)] = False
+                except Exception as e:
+                    logger.warning('P2P access check failed for %d->%d: %s', src, dst, e)
+                    _p2p_access = False
+
+    if _p2p_access:
+        logger.info('P2P access enabled across all %d devices', num_devices)
+    else:
+        logger.info('P2P access not fully available across %d devices, '
+                     'using staged CPU transfers for cross-device copies', num_devices)
+
+# Allow override via environment variable
+_force_single_gpu = os.environ.get('GPU4PYSCF_SINGLE_GPU', '').lower() in ('1', 'true', 'yes')
+if _force_single_gpu and num_devices > 1:
+    logger.info('GPU4PYSCF_SINGLE_GPU set, forcing single-GPU mode (device 0)')
+    num_devices = 1
 
 # Overwrite the above settings using the global pyscf configs
 from pyscf.__config__ import * # noqa

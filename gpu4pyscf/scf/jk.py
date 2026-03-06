@@ -47,8 +47,6 @@ libvhf_rys.cuda_version.restype = ctypes.c_int
 CUDA_VERSION = libvhf_rys.cuda_version()
 libgint = load_library('libgint')
 
-libvhf_rys.RYS_init_constant()
-
 PTR_BAS_COORD = 7
 LMAX = 4
 TILE = 1
@@ -59,8 +57,13 @@ GOUT_WIDTH = 42
 THREADS = 256
 GROUP_SIZE = 256
 
-libvhf_rys.RYS_build_k_init(ctypes.c_int(SHM_SIZE))
-libvhf_rys.RYS_build_jk_init(ctypes.c_int(SHM_SIZE))
+# Initialize CUDA constant memory on ALL visible devices
+for _dev_id in range(num_devices):
+    with cp.cuda.Device(_dev_id):
+        libvhf_rys.RYS_init_constant()
+        libvhf_rys.RYS_build_k_init(ctypes.c_int(SHM_SIZE))
+        libvhf_rys.RYS_build_jk_init(ctypes.c_int(SHM_SIZE))
+del _dev_id
 
 def get_jk(mol, dm, hermi=0, vhfopt=None, with_j=True, with_k=True, verbose=None):
     '''Compute J, K matrices

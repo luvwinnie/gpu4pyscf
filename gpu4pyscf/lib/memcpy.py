@@ -19,22 +19,27 @@ from gpu4pyscf.__config__ import _p2p_access
 
 __all__ = ['p2p_transfer', 'copy_array']
 
+def _staged_copy_via_cpu(src, dst):
+    '''Copy between devices via pinned CPU memory when P2P is unavailable.'''
+    with cupy.cuda.Device(src.device.id):
+        cupy.cuda.Device(src.device.id).synchronize()
+        host_buf = cupy.asnumpy(src)
+    with cupy.cuda.Device(dst.device.id):
+        dst[:] = cupy.asarray(host_buf)
+
 def p2p_transfer(a, b):
     ''' If the direct P2P data transfer is not available, transfer data via CPU memory
     '''
     if a.device == b.device:
         a[:] = b
     elif _p2p_access:
+        # Synchronize source device before cross-device copy
+        with cupy.cuda.Device(b.device.id):
+            cupy.cuda.Device(b.device.id).synchronize()
         a[:] = b
-        '''
-    elif a.strides == b.strides and a.flags.c_contiguous and a.dtype == b.dtype:
-        # cupy supports a direct copy from different devices without p2p. See also
-        # https://github.com/cupy/cupy/blob/v13.3.0/cupy/_core/_routines_indexing.pyx#L48
-        # https://github.com/cupy/cupy/blob/v13.3.0/cupy/_core/_routines_indexing.pyx#L1015
-        a[:] = b
-        '''
     else:
-        copy_array(b, a)
+        # No P2P: stage through CPU (pinned memory for better throughput)
+        _staged_copy_via_cpu(b, a)
     return a
 
 def find_contiguous_chunks(shape, h_strides, d_strides):

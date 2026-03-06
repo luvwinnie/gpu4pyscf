@@ -44,7 +44,12 @@ THREADS = 256
 
 libvhf_md = load_library('libgvhf_md')
 libvhf_md.MD_build_j.restype = ctypes.c_int
-libvhf_md.init_mdj_constant(ctypes.c_int(SHM_SIZE))
+
+# Initialize CUDA constant memory on ALL visible devices
+for _dev_id in range(num_devices):
+    with cp.cuda.Device(_dev_id):
+        libvhf_md.init_mdj_constant(ctypes.c_int(SHM_SIZE))
+del _dev_id
 
 def get_j(mol, dm, hermi=1, vhfopt=None, verbose=None):
     '''Compute J matrix

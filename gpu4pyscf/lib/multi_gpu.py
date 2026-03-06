@@ -16,11 +16,14 @@
 import builtins
 from concurrent.futures import ThreadPoolExecutor
 import functools
+import logging
 import cupy as cp
 import numpy as np
 from pyscf.lib import prange
 from gpu4pyscf.lib.memcpy import p2p_transfer
 from gpu4pyscf.__config__ import num_devices
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     'run', 'map', 'reduce', 'array_reduce', 'array_broadcast', 'lru_cache'
@@ -33,7 +36,7 @@ def run(func, args=(), kwargs={}, non_blocking=False):
         non_blocking: If `True`, functions are executed in parallel using multi-threads.
     '''
     if num_devices == 1:
-        return [func(*args, *kwargs)]
+        return [func(*args, **kwargs)]
 
     synchronize()
 
@@ -57,7 +60,7 @@ def map(func, tasks, args=(), kwargs={}, schedule='dynamic') -> list:
             If 'dynamic', tasks are scheduled dynamically, with better load balance.
     '''
     if num_devices == 1:
-        return [func(t, *args, *kwargs) for t in tasks]
+        return [func(t, *args, **kwargs) for t in tasks]
 
     tasks = enumerate(tasks)
     result = {}
@@ -96,7 +99,7 @@ def reduce(func, tasks, args=(), kwargs={}, schedule='dynamic'):
         else:
             groups[device_id] += r
 
-    for i in num_devices:
+    for i in range(num_devices):
         if groups[i] is None:
             groups[i] = cp.zeros(result[0].shape, dtype=dtype)
     return array_reduce(groups, inplace=True)

@@ -51,8 +51,12 @@ GB = 1024*1024*1024
 ALIGNED = 4
 DD_CACHE_MAX = rhf_grad.DD_CACHE_MAX
 
-libvhf_rys.RYS_build_vjk_ip1_init(ctypes.c_int(SHM_SIZE))
-libvhf_rys.RYS_build_ejk_ip2_init(ctypes.c_int(SHM_SIZE))
+# Initialize CUDA constant memory on ALL visible devices
+for _dev_id in range(num_devices):
+    with cupy.cuda.Device(_dev_id):
+        libvhf_rys.RYS_build_vjk_ip1_init(ctypes.c_int(SHM_SIZE))
+        libvhf_rys.RYS_build_ejk_ip2_init(ctypes.c_int(SHM_SIZE))
+del _dev_id
 
 def hess_elec(hessobj, mo_energy=None, mo_coeff=None, mo_occ=None,
               mo1=None, mo_e1=None, h1mo=None,
